@@ -1,14 +1,80 @@
 (() => {
-  const style = document.createElement('style');
-  style.textContent = `.nav-call span,.button span,.map-link span,.contact-call span{display:inline-block;transition:transform .25s ease}.nav-call:hover span,.button:hover span,.map-link:hover span,.contact-call:hover span{transform:translateX(4px)}.hero-carousel{height:660px;position:relative;overflow:hidden}.hero-track{height:100%;display:flex;transition:transform .4s ease-in-out;touch-action:pan-y}.hero-slide{flex:0 0 100%;height:100%;position:relative;margin:0;overflow:hidden}.hero-slide img{display:block;width:100%;height:100%;object-fit:cover}.hero-slide:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(247,246,242,.25),transparent 30%);pointer-events:none}.hero-slide figcaption{position:absolute;z-index:1;bottom:22px;right:24px;font:10px Manrope,sans-serif;letter-spacing:.18em;color:#fff}.carousel-arrow{position:absolute;z-index:2;top:50%;width:44px;height:44px;border:1px solid rgba(255,255,255,.8);border-radius:50%;background:rgba(36,39,37,.42);color:#fff;font:22px Manrope,sans-serif;line-height:1;transform:translateY(-50%);cursor:pointer;transition:background .25s ease}.carousel-arrow:hover{background:rgba(36,39,37,.8)}.carousel-arrow.prev{left:20px}.carousel-arrow.next{right:20px}.carousel-dots{position:absolute;z-index:2;left:50%;bottom:22px;display:flex;gap:8px;transform:translateX(-50%)}.carousel-dots button{width:8px;height:8px;border:1px solid #fff;border-radius:50%;background:transparent;padding:0;cursor:pointer}.carousel-dots button[aria-selected=true]{background:#fff}@media(max-width:900px){.hero-carousel{height:500px}}@media(max-width:560px){.hero-carousel{height:310px}.carousel-arrow{width:38px;height:38px;font-size:18px}.carousel-arrow.prev{left:12px}.carousel-arrow.next{right:12px}.carousel-dots{bottom:14px}.hero-slide figcaption{bottom:14px;right:16px;font-size:9px}}@media(prefers-reduced-motion:reduce){.hero-track,.carousel-arrow,.nav-call span,.button span,.map-link span,.contact-call span{transition:none}}`;
-  document.head.appendChild(style);
-  const finalPatch = document.createElement('style');
-  finalPatch.textContent = `.contact-call{background:transparent;color:#fff;padding:0;min-height:0}.contact-call small{color:#d8ddd6}.contact-call strong{color:#fff}`;
-  document.head.appendChild(finalPatch);
-  const button = document.querySelector('.menu-toggle'); const nav = document.querySelector('#site-nav'); const closeMenu = () => { if (button && nav) { button.setAttribute('aria-expanded', 'false'); nav.classList.remove('is-open'); } };
-  if (button && nav) { button.addEventListener('click', () => { const open = button.getAttribute('aria-expanded') === 'true'; button.setAttribute('aria-expanded', String(!open)); nav.classList.toggle('is-open', !open); }); nav.querySelectorAll('a').forEach((link) => link.addEventListener('click', closeMenu)); document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMenu(); }); }
-  const track = document.querySelector('.hero-track'); const slides = [...document.querySelectorAll('.hero-slide')]; const dots = [...document.querySelectorAll('.carousel-dots button')]; const prev = document.querySelector('.carousel-arrow.prev'); const next = document.querySelector('.carousel-arrow.next'); if (!track || slides.length !== 3) return; let current = 0;
-  const announce = () => { track.style.transform = `translateX(-${current * 100}%)`; dots.forEach((dot, index) => dot.setAttribute('aria-selected', String(index === current))); slides.forEach((slide, index) => slide.setAttribute('aria-hidden', String(index !== current))); };
-  const move = (step) => { current = (current + step + slides.length) % slides.length; announce(); }; prev?.addEventListener('click', () => move(-1)); next?.addEventListener('click', () => move(1)); dots.forEach((dot, index) => dot.addEventListener('click', () => { current = index; announce(); })); document.querySelector('.hero-carousel')?.addEventListener('keydown', (event) => { if (event.key === 'ArrowLeft') move(-1); if (event.key === 'ArrowRight') move(1); });
-  let startX = 0; track.addEventListener('touchstart', (event) => { startX = event.touches[0].clientX; }, { passive: true }); track.addEventListener('touchend', (event) => { const delta = event.changedTouches[0].clientX - startX; if (Math.abs(delta) > 45) move(delta < 0 ? 1 : -1); }, { passive: true }); announce();
+  'use strict';
+  const menu = document.querySelector('.menu');
+  const nav = document.querySelector('.nav');
+  if (menu && nav) {
+    const close = () => {
+      nav.classList.remove('is-open');
+      menu.setAttribute('aria-expanded', 'false');
+      menu.setAttribute('aria-label', 'メニューを開く');
+    };
+    menu.addEventListener('click', () => {
+      const opening = menu.getAttribute('aria-expanded') !== 'true';
+      nav.classList.toggle('is-open', opening);
+      menu.setAttribute('aria-expanded', String(opening));
+      menu.setAttribute('aria-label', opening ? 'メニューを閉じる' : 'メニューを開く');
+    });
+    nav.querySelectorAll('a').forEach(link => link.addEventListener('click', close));
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && menu.getAttribute('aria-expanded') === 'true') {
+        close();
+        menu.focus();
+      }
+    });
+    document.addEventListener('pointerdown', event => {
+      if (!nav.contains(event.target) && !menu.contains(event.target)) close();
+    });
+    window.matchMedia('(min-width: 851px)').addEventListener('change', event => {
+      if (event.matches) close();
+    });
+  }
+
+  const root = document.querySelector('.hero-carousel');
+  if (!root) return;
+  const track = root.querySelector('.hero-track');
+  const slides = [...root.querySelectorAll('.hero-slide')];
+  const dots = [...root.querySelectorAll('.carousel-dots button')];
+  const counter = document.querySelector('.hero-current');
+  const progress = document.querySelector('.progress-line i');
+  const status = root.querySelector('.carousel-status');
+  if (!track || !slides.length) return;
+  let current = 0;
+  const update = (announce = false) => {
+    track.style.transform = `translateX(-${current * 100}%)`;
+    slides.forEach((slide, i) => {
+      slide.setAttribute('aria-hidden', String(i !== current));
+      slide.setAttribute('aria-label', `${i + 1} / ${slides.length}`);
+    });
+    dots.forEach((dot, i) => {
+      if (i === current) dot.setAttribute('aria-current', 'true');
+      else dot.removeAttribute('aria-current');
+    });
+    if (counter) counter.textContent = String(current + 1).padStart(2, '0');
+    if (progress) progress.style.transform = `translateX(${current * 100}%)`;
+    if (status && announce) status.textContent = `${slides.length}枚中${current + 1}枚目の建築イメージ`;
+  };
+  const go = index => {
+    current = (index + slides.length) % slides.length;
+    update(true);
+  };
+  root.querySelector('.prev')?.addEventListener('click', () => go(current - 1));
+  root.querySelector('.next')?.addEventListener('click', () => go(current + 1));
+  dots.forEach((dot, i) => dot.addEventListener('click', () => go(i)));
+  root.addEventListener('keydown', event => {
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      go(current + (event.key === 'ArrowRight' ? 1 : -1));
+    }
+  });
+  let startX = null;
+  root.addEventListener('touchstart', event => {
+    startX = event.changedTouches[0].clientX;
+  }, { passive: true });
+  root.addEventListener('touchend', event => {
+    if (startX === null) return;
+    const distance = event.changedTouches[0].clientX - startX;
+    if (Math.abs(distance) > 45) go(current + (distance < 0 ? 1 : -1));
+    startX = null;
+  }, { passive: true });
+  update();
 })();
